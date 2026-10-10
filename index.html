@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>叫的是你的名字吗？—— 信号检测论情景演示</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #eef2f8; color: #1f2937;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ============ 场景（所有界面共用背景） ============ */
+  #scene { position: fixed; inset: 0; z-index: 0; }
+  #scene svg { width: 100%; height: 100%; display: block; }
+
+  .screen { position: fixed; inset: 0; z-index: 1; display: none; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ============ 通用卡片（登录 / 主界面） ============ */
+  .home-card {
+    background: rgba(255,255,255,0.92);
+    border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(15,23,42,0.14);
+    padding: clamp(20px, 4vh, 44px) clamp(28px, 5vw, 64px);
+    max-width: min(680px, 92vw);
+    text-align: center;
+    margin: auto;
+  }
+  .home-card h1 {
+    font-size: clamp(24px, 4vh, 40px);
+    color: #1e3a8a; letter-spacing: 2px; margin-bottom: 12px;
+  }
+
+  /* ============ 登录界面 ============ */
+  #login { align-items: center; justify-content: center; }
+  .login-form { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 18px; text-align: left; }
+  .login-form label { font-size: clamp(12px, 1.6vh, 14px); color: #475569; font-weight: 700; }
+  .login-form input {
+    width: 100%; margin-top: 6px; padding: 10px 14px;
+    border: 2px solid #cbd5e1; border-radius: 10px;
+    font-size: clamp(14px, 1.8vh, 16px); outline: none; background: #fff;
+  }
+  .login-form input:focus { border-color: #2f6fed; }
+  .login-form input[readonly] { background: #f1f5f9; color: #b45309; font-weight: 700; }
+  .err { color: #dc2626; font-size: clamp(11px, 1.4vh, 13px); min-height: 1.2em; }
+  #loginBtn, #startBtn {
+    font-size: clamp(16px, 2.2vh, 20px); font-weight: 700;
+    padding: 12px 56px; border: none; border-radius: 999px;
+    background: linear-gradient(135deg, #2f6fed, #1d4ed8); color: #fff;
+    box-shadow: 0 8px 22px rgba(29,78,216,0.4);
+    transition: transform .12s ease;
+  }
+  #loginBtn:hover, #startBtn:hover { transform: translateY(-2px); }
+  #guestBtn {
+    background: none; border: none; color: #64748b; text-decoration: underline;
+    font-size: clamp(12px, 1.6vh, 14px); margin-top: 14px;
+  }
+  #guestBtn:hover { color: #2f6fed; }
+
+  /* ============ 主界面 ============ */
+  #home { align-items: center; justify-content: center; }
+  #userBadge {
+    font-size: clamp(11px, 1.5vh, 14px); color: #2f6fed; font-weight: 700;
+    margin-bottom: 6px;
+  }
+  #userBadge .debug-tag {
+    background: #fffbeb; color: #b45309; border: 1px dashed #f59e0b;
+    border-radius: 999px; padding: 2px 10px; margin-left: 8px;
+  }
+  .home-card .intro {
+    font-size: clamp(14px, 1.8vh, 18px);
+    line-height: 1.8; color: #374151; margin-bottom: 6px;
+  }
+  .home-card .tip { font-size: clamp(12px, 1.5vh, 14px); color: #6b7280; margin-bottom: 8px; }
+  .round-options { display: flex; gap: 14px; justify-content: center; margin: 14px 0 20px; }
+  .round-opt input { position: absolute; opacity: 0; pointer-events: none; }
+  .round-opt span {
+    display: inline-block; padding: 10px 24px; border-radius: 999px;
+    border: 2px solid #cbd5e1; background: #fff; color: #475569;
+    font-size: clamp(14px, 1.8vh, 17px); font-weight: 600;
+    transition: all .15s ease;
+  }
+  .round-opt input:checked + span {
+    border-color: #2f6fed; background: #2f6fed; color: #fff;
+    box-shadow: 0 4px 14px rgba(47,111,237,0.35);
+  }
+  /* 调试面板 */
+  #debugPanel {
+    display: none; margin: 0 auto 16px; padding: 10px 16px;
+    border: 1.5px dashed #f59e0b; border-radius: 12px; background: #fffbeb;
+    font-size: clamp(12px, 1.6vh, 14px); color: #92400e; font-weight: 600;
+    align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center;
+    width: fit-content;
+  }
+  #debugPanel.active { display: flex; }
+  #msMinus, #msPlus {
+    width: 32px; height: 32px; border-radius: 8px; border: none;
+    background: #f59e0b; color: #fff; font-size: 18px; font-weight: 800;
+  }
+  #msInput {
+    width: 86px; padding: 6px; border: 2px solid #f59e0b; border-radius: 8px;
+    text-align: center; font-size: clamp(13px, 1.6vh, 15px); font-weight: 700; outline: none;
+  }
+  #msNow { font-weight: 400; color: #b45309; }
+
+  /* ============ 游戏界面 ============ */
+  #gamebar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 20px; z-index: 2;
+  }
+  .bar-btn {
+    border: none; border-radius: 10px; padding: 8px 18px;
+    background: rgba(255,255,255,0.92); color: #1f2937;
+    font-size: clamp(13px, 1.6vh, 16px); font-weight: 600;
+    box-shadow: 0 3px 10px rgba(15,23,42,0.15);
+  }
+  .bar-btn:hover { background: #fff; }
+  #roundLabel {
+    background: rgba(255,255,255,0.92); border-radius: 999px;
+    padding: 8px 26px; font-size: clamp(14px, 1.9vh, 18px); font-weight: 700;
+    color: #1e3a8a; box-shadow: 0 3px 10px rgba(15,23,42,0.15);
+  }
+  #debugFlag {
+    position: absolute; top: 62px; right: 20px; z-index: 2;
+    background: #fffbeb; color: #b45309; border: 1px dashed #f59e0b;
+    font-size: clamp(11px, 1.4vh, 13px); font-weight: 700;
+    border-radius: 999px; padding: 4px 14px; display: none;
+  }
+
+  /* 问题框 / 结果框：居中于画面正中 */
+  #bottombar {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; z-index: 2; pointer-events: none;
+  }
+  .qbox, .dbox {
+    pointer-events: auto; text-align: center;
+    background: rgba(255,255,255,0.96);
+    border-radius: 16px; padding: 18px 34px;
+    box-shadow: 0 10px 30px rgba(15,23,42,0.22);
+    animation: pop .18s ease;
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .qbox .qtext { font-size: clamp(16px, 2.4vh, 21px); font-weight: 700; color: #111827; margin-bottom: 14px; }
+  .ans-btns { display: flex; gap: 22px; justify-content: center; }
+  .ans-btn {
+    min-width: 110px; padding: 10px 26px; border-radius: 12px; border: none;
+    font-size: clamp(15px, 2vh, 19px); font-weight: 700; color: #fff;
+  }
+  #yesBtn { background: #16a34a; box-shadow: 0 5px 14px rgba(22,163,74,0.4); }
+  #noBtn  { background: #64748b; box-shadow: 0 5px 14px rgba(100,116,139,0.4); }
+  .ans-btn:hover:not(:disabled) { transform: translateY(-2px); }
+  .ans-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  .dbox .badge {
+    display: inline-block; padding: 3px 16px; border-radius: 999px;
+    color: #fff; font-size: clamp(13px, 1.6vh, 15px); font-weight: 700; margin-bottom: 8px;
+  }
+  .dbox .dtext { font-size: clamp(14px, 2vh, 18px); color: #1f2937; margin-bottom: 14px; }
+  #nextBtn {
+    padding: 9px 44px; border-radius: 12px; border: none;
+    background: #2f6fed; color: #fff; font-size: clamp(14px, 1.9vh, 17px); font-weight: 700;
+    box-shadow: 0 5px 14px rgba(47,111,237,0.4);
+  }
+
+  /* 暂停 / 确认弹层 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 6; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(241,245,249,0.6); backdrop-filter: blur(3px);
+  }
+  .overlay.active { display: flex; }
+  .modal {
+    background: #fff; border-radius: 18px; padding: 30px 44px; text-align: center;
+    box-shadow: 0 18px 50px rgba(15,23,42,0.25); animation: pop .18s ease;
+  }
+  .modal h3 { font-size: clamp(17px, 2.4vh, 22px); margin-bottom: 20px; color: #111827; }
+  .modal-btns { display: flex; gap: 18px; justify-content: center; }
+  .modal-btns button {
+    padding: 9px 34px; border-radius: 10px; border: none;
+    font-size: clamp(14px, 1.8vh, 16px); font-weight: 700;
+  }
+  #resumeBigBtn { background: #2f6fed; color: #fff; }
+  #confirmBackBtn { background: #dc2626; color: #fff; }
+  #cancelBackBtn, #quitPauseBtn { background: #e5e7eb; color: #374151; }
+  #goLoginBtn { background: #2f6fed; color: #fff; }
+  #cancelGuestBtn { background: #e5e7eb; color: #374151; }
+
+  /* ============ 结果界面（单屏 16:9，不滚动） ============ */
+  #results {
+    background: rgba(248,250,253,0.96);
+    padding: clamp(10px, 1.8vh, 22px) clamp(18px, 3vw, 40px);
+    overflow: hidden;
+  }
+  .res-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: clamp(6px, 1vh, 12px);
+  }
+  .res-head h2 { font-size: clamp(16px, 2.6vh, 26px); color: #1e3a8a; }
+  .res-head .sub { font-size: clamp(10px, 1.4vh, 13px); color: #6b7280; margin-top: 2px; }
+  .res-actions { display: flex; gap: 12px; }
+  .res-actions button {
+    padding: 8px 22px; border-radius: 10px; border: none;
+    font-size: clamp(12px, 1.6vh, 15px); font-weight: 700;
+  }
+  #againBtn { background: #2f6fed; color: #fff; }
+  #homeBtn { background: #e5e7eb; color: #374151; }
+
+  .res-grid {
+    flex: 1; min-height: 0;
+    display: grid; grid-template-columns: 1.15fr 1fr 1fr;
+    gap: clamp(10px, 1.6vw, 24px);
+  }
+  .res-col {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 6px 20px rgba(15,23,42,0.08);
+    padding: clamp(8px, 1.4vh, 18px) clamp(12px, 1.4vw, 22px);
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .res-col h3 {
+    font-size: clamp(12px, 1.7vh, 16px); color: #1e3a8a;
+    border-left: 4px solid #2f6fed; padding-left: 10px; margin-bottom: clamp(4px, 1vh, 10px);
+  }
+
+  table.cm { width: 100%; border-collapse: collapse; margin-bottom: clamp(4px, 1vh, 10px); }
+  table.cm th, table.cm td {
+    border: 1px solid #dbe2ea; padding: clamp(3px, 0.8vh, 8px) 6px;
+    text-align: center; font-size: clamp(10px, 1.4vh, 13px);
+  }
+  table.cm th { background: #f1f5fb; color: #334155; font-weight: 700; }
+  table.cm td .num { font-weight: 700; display: block; font-size: clamp(11px, 1.7vh, 16px); }
+  table.cm td.hit { background: #f0fdf4; color: #15803d; }
+  table.cm td.miss { background: #fff7ed; color: #c2410c; }
+  table.cm td.fa { background: #fef2f2; color: #b91c1c; }
+  table.cm td.cr { background: #eff6ff; color: #1d4ed8; }
+  .rate-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chip {
+    border-radius: 10px; padding: clamp(4px, 0.9vh, 9px) 10px; text-align: center;
+    font-size: clamp(9px, 1.4vh, 12px); color: #475569;
+  }
+  .chip b { display: block; font-size: clamp(12px, 1.8vh, 17px); }
+
+  .metric-list { display: flex; flex-direction: column; gap: clamp(4px, 0.9vh, 10px); flex: 1; min-height: 0; justify-content: center; }
+  .metric {
+    border: 1px solid #e3e9f2; border-radius: 12px; padding: clamp(4px, 0.9vh, 10px) 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .metric .mname { font-size: clamp(10px, 1.5vh, 13px); font-weight: 700; color: #334155; }
+  .metric .mname small { display: block; font-weight: 400; color: #94a3b8; font-size: clamp(9px, 1.2vh, 11px); }
+  .metric .mval { font-size: clamp(13px, 2.1vh, 20px); font-weight: 800; color: #1d4ed8; white-space: nowrap; }
+  .m-note { font-size: clamp(8px, 1.1vh, 10px); color: #94a3b8; text-align: center; line-height: 1.5; margin-top: 4px; }
+
+  .roc-wrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .roc-wrap svg { aspect-ratio: 1 / 1; height: 100%; max-width: 100%; max-height: 100%; }
+
+  /* 结果页底部：排行榜入口 */
+  .res-foot { display: flex; justify-content: center; margin-top: clamp(6px, 1.2vh, 14px); }
+  #lbBtn {
+    padding: clamp(8px, 1.4vh, 13px) 38px; border-radius: 999px; border: none;
+    background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff;
+    font-size: clamp(13px, 1.8vh, 17px); font-weight: 700;
+    box-shadow: 0 6px 16px rgba(217,119,6,0.35);
+  }
+  #lbBtn:hover { transform: translateY(-2px); }
+
+  /* ============ 排行榜界面 ============ */
+  #leaderboard {
+    background: rgba(248,250,253,0.97);
+    padding: clamp(12px, 2vh, 24px) clamp(16px, 3vw, 44px);
+  }
+  .lb-head { display: flex; align-items: center; gap: 16px; margin-bottom: clamp(8px, 1.4vh, 16px); }
+  .lb-head h2 { flex: 1; text-align: center; font-size: clamp(17px, 2.8vh, 26px); color: #1e3a8a; }
+  .lb-user-tag { font-size: clamp(11px, 1.4vh, 13px); color: #64748b; min-width: 130px; text-align: right; }
+  .lb-list {
+    flex: 1; min-height: 0; overflow-y: auto;
+    background: #fff; border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(15,23,42,0.08);
+    padding: clamp(6px, 1.2vh, 14px);
+  }
+  table.lb { width: 100%; border-collapse: collapse; }
+  table.lb th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f1f5fb; color: #334155; font-weight: 700;
+    padding: clamp(6px, 1.2vh, 12px) 8px;
+    font-size: clamp(10px, 1.5vh, 14px);
+    border-bottom: 2px solid #dbe2ea;
+  }
+  table.lb td {
+    padding: clamp(5px, 1.1vh, 11px) 8px; text-align: center;
+    border-bottom: 1px solid #eef2f7;
+    font-size: clamp(11px, 1.6vh, 15px); color: #374151;
+  }
+  table.lb td.nick { font-weight: 700; color: #1f2937; }
+  table.lb td.dval { font-weight: 800; color: #1d4ed8; }
+  table.lb tr.top1 td { background: #fef9c3; }
+  table.lb tr.top2 td { background: #f1f5f9; }
+  table.lb tr.top3 td { background: #fdf6ec; }
+  table.lb tr.me td { background: #dbeafe !important; color: #1e3a8a; }
+  table.lb tr.me td:first-child { box-shadow: inset 4px 0 0 #2f6fed; }
+  .rank-medal { font-size: clamp(13px, 1.9vh, 17px); }
+
+  .lb-foot {
+    margin-top: clamp(8px, 1.4vh, 14px);
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 6px 22px rgba(15,23,42,0.14);
+    padding: clamp(8px, 1.4vh, 15px) clamp(14px, 2vw, 30px);
+    display: flex; align-items: center; justify-content: center; gap: clamp(8px, 1.4vw, 22px);
+    flex-wrap: wrap;
+    font-size: clamp(11px, 1.6vh, 15px);
+  }
+  .lb-foot .me-rank {
+    background: #2f6fed; color: #fff; font-weight: 800; border-radius: 999px;
+    padding: 4px 16px; font-size: clamp(11px, 1.6vh, 14px); white-space: nowrap;
+  }
+  .lb-foot .me-nick { font-weight: 800; color: #1e3a8a; }
+  .lb-foot .me-item { color: #475569; white-space: nowrap; }
+  .lb-foot .me-item b { color: #1d4ed8; }
+  .lb-foot .no-rec { color: #94a3b8; }
+
+  /* 细滚动条 */
+  .lb-list::-webkit-scrollbar { width: 8px; }
+  .lb-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ===================== 共用背景场景 ===================== -->
+<div id="scene"></div>
+
+<!-- ===================== 登录界面 ===================== -->
+<div id="login" class="screen active">
+  <div class="home-card">
+    <h1>叫的是你的名字吗</h1>
+    <p class="tip">信号检测论情景演示 · 请先登录以记录成绩</p>
+    <div class="login-form">
+      <label>学号
+        <input id="studentIdInput" maxlength="12" placeholder="请输入 12 位学号" autocomplete="off">
+      </label>
+      <div class="err" id="loginErr"></div>
+      <label>昵称
+        <input id="nicknameInput" maxlength="16" placeholder="请输入昵称" autocomplete="off">
+      </label>
+    </div>
+    <button id="loginBtn">进入</button>
+    <button id="guestBtn">游客模式进入（成绩不计入排行榜）</button>
+  </div>
+</div>
+
+<!-- ===================== 主界面 ===================== -->
+<div id="home" class="screen">
+  <div class="home-card">
+    <div id="userBadge"></div>
+    <h1>叫的是你的名字吗</h1>
+    <p class="intro">你叫<b>赢麻了</b>，一个普通的大学生。一天下课后在去食堂的拥挤人群中，你好像听见有人在喊你的名字……</p>
+    <p class="tip">人群里喊的可能是"赢麻了"，也可能是"嬴麻了""羸麻了"等相近的名字。对话框只会一闪而过（0.3 秒），看清字形，凭你的感觉判断吧！</p>
+    <div id="debugPanel">
+      🛠 调试模式 · 对话框显示时长：
+      <button id="msMinus" title="减少 50ms">−</button>
+      <input id="msInput" type="number" value="300" min="50" max="3000" step="50">
+      <button id="msPlus" title="增加 50ms">+</button>
+      <span id="msNow">当前：300 ms（本模式成绩不计入排行榜）</span>
+    </div>
+    <div class="round-options" id="roundOptions">
+      <label class="round-opt"><input type="radio" name="rounds" value="25" checked><span>25 轮</span></label>
+      <label class="round-opt"><input type="radio" name="rounds" value="50"><span>50 轮</span></label>
+      <label class="round-opt"><input type="radio" name="rounds" value="100"><span>100 轮</span></label>
+    </div>
+    <button id="startBtn">开始游戏</button>
+  </div>
+</div>
+
+<!-- ===================== 游戏界面 ===================== -->
+<div id="game" class="screen">
+  <div id="gamebar">
+    <button class="bar-btn" id="backBtn">← 返回</button>
+    <div id="roundLabel">1 / 25</div>
+    <button class="bar-btn" id="pauseBtn">⏸ 暂停</button>
+  </div>
+  <div id="debugFlag">🛠 调试模式 300ms</div>
+  <div id="bottombar">
+    <div class="qbox" id="questionBox" style="display:none">
+      <div class="qtext">叫的是你的名字吗？</div>
+      <div class="ans-btns">
+        <button class="ans-btn" id="yesBtn">是</button>
+        <button class="ans-btn" id="noBtn">否</button>
+      </div>
+    </div>
+    <div class="dbox" id="dialogBox" style="display:none">
+      <span class="badge" id="dBadge">命中</span>
+      <div class="dtext" id="dText"></div>
+      <button id="nextBtn">下一轮</button>
+    </div>
+  </div>
+</div>
+
+<!-- 暂停弹层 -->
+<div class="overlay" id="pauseOverlay">
+  <div class="modal">
+    <h3>游戏已暂停</h3>
+    <div class="modal-btns">
+      <button id="resumeBigBtn">▶ 继续</button>
+      <button id="quitPauseBtn">返回主界面</button>
+    </div>
+  </div>
+</div>
+
+<!-- 返回确认弹层 -->
+<div class="overlay" id="backOverlay">
+  <div class="modal">
+    <h3>确认返回主界面？</h3>
+    <div class="modal-btns">
+      <button id="confirmBackBtn">确认</button>
+      <button id="cancelBackBtn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 游客查看排行榜提示弹层 -->
+<div class="overlay" id="guestOverlay">
+  <div class="modal">
+    <h3>请先登录后再查看排行榜</h3>
+    <div class="modal-btns">
+      <button id="goLoginBtn">去登录</button>
+      <button id="cancelGuestBtn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 结果界面 ===================== -->
+<div id="results" class="screen">
+  <div class="res-head">
+    <div>
+      <h2>实验结果</h2>
+      <div class="sub" id="resSub"></div>
+    </div>
+    <div class="res-actions">
+      <button id="againBtn">再来一次</button>
+      <button id="homeBtn">返回主界面</button>
+    </div>
+  </div>
+  <div class="res-grid">
+    <div class="res-col">
+      <h3>混淆矩阵</h3>
+      <table class="cm" id="cmTable"></table>
+      <div class="rate-chips" id="rateChips"></div>
+    </div>
+    <div class="res-col">
+      <h3>信号检测指标</h3>
+      <div class="metric-list" id="metricList"></div>
+      <div class="m-note">注：计算 d′、c、β 时对命中率和虚报率做了对数线性校正<br>（H±0.5，Macmillan &amp; Kaplan, 1985），避免 0/1 极端比率。</div>
+    </div>
+    <div class="res-col">
+      <h3>ROC 曲线</h3>
+      <div class="roc-wrap" id="rocWrap"></div>
+    </div>
+  </div>
+  <div class="res-foot">
+    <button id="lbBtn">🏆 查看排行榜</button>
+  </div>
+</div>
+
+<!-- ===================== 排行榜界面 ===================== -->
+<div id="leaderboard" class="screen">
+  <div class="lb-head">
+    <button class="bar-btn" id="lbBackBtn">← 返回结果</button>
+    <h2>🏆 排行榜</h2>
+    <span class="lb-user-tag" id="lbUserTag"></span>
+  </div>
+  <div class="lb-list" id="lbList"></div>
+  <div class="lb-foot" id="lbFoot"></div>
+</div>
+
+<script>
+/* =====================================================================
+ * 排行榜后端接口预留（FastAPI + MySQL，暂未开发）
+ * ---------------------------------------------------------------------
+ * 前端独立空跑模式：
+ *   LeaderboardAPI.enabled = false 时，submit / fetchLeaderboard 使用
+ *   本地 Mock 数据（内置演示玩家 + localStorage 保存的本地成绩）。
+ * 后端对接：
+ *   将 enabled 置为 true 并配置 baseUrl 后，自动改走真实 HTTP 接口。
+ * 详细字段与协议见 docs/API对接文档.md。
+ *   POST /api/login        登录 / 注册
+ *   POST /api/submit       提交一局成绩（游客、调试模式不提交）
+ *   GET  /api/leaderboard  获取排行榜（按 d′ 降序，每人仅取最高局）
+ * ===================================================================== */
+const LeaderboardAPI = {
+  enabled: true,
+  baseUrl: 'https://mngqwdikvlnf.sealoshzh.site',
+
+  // 提交一局成绩。游客 / 调试模式由调用方保证不调用（不上传）。
+  async submit(rec) {
+    if (this.enabled && this.baseUrl) {
+      return fetch(this.baseUrl + '/api/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rec)
+      }).then(r => r.json()).catch(e => {
+        console.warn('成绩上传失败（已忽略）:', e && e.message || e);
+        return { ok: false };
+      });
+    }
+    // ---- Mock：写入 localStorage ----
+    const rs = loadLocalRecords(); rs.push(rec); saveLocalRecords(rs);
+    return { ok: true, mock: true };
+  },
+
+  // 获取排行榜（已按 d′ 降序、按玩家去重取最高局）
+  async fetchLeaderboard() {
+    if (this.enabled && this.baseUrl) {
+      return fetch(this.baseUrl + '/api/leaderboard')
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)));
+    }
+    // ---- Mock：内置演示玩家 + 本地成绩合并 ----
+    return Promise.resolve(getBoardRecords());
+  }
+};
+
+/* ===================== 常量 ===================== */
+const SIGNAL = '赢麻了';                             // 信号：确实在叫你
+const NOISES = ['嬴麻了','羸麻了','赢庥了','赢痳了','嬴痳了','羸庥了']; // 噪声：相近名字
+const WAIT_MS = 1000;   // 每轮同步轮数后到气泡弹出
+const DEBUG_ID = '<><>BA';            // 调试模式特殊学号
+let   bubbleMs = 300;                 // 对话框显示时长（默认 0.3s，调试模式可调）
+const LS_KEY = 'sdt_records_v2';      // 空跑模式本地成绩存储键
+
+/* ===================== 用户 / 登录状态 ===================== */
+let user = null; // { studentId, nickname, guest, debug }
+
+/* ===================== 空跑模式：本地成绩存储 ===================== */
+function loadLocalRecords() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || []; } catch (e) { return []; }
+}
+function saveLocalRecords(rs) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(rs)); } catch (e) {}
+}
+
+/* 内置演示玩家（仅空跑模式使用，后端启用后由服务器数据取代） */
+const DEMO_PLAYERS = [
+  { id: 'demo-01', nickname: '顺风耳本人',   rounds: 100, dPrime:  2.31, H: .92, M: .08, F: .31, R: .69 },
+  { id: 'demo-02', nickname: '食堂钉子户',   rounds: 100, dPrime:  1.94, H: .84, M: .16, F: .26, R: .74 },
+  { id: 'demo-03', nickname: '耳朵有点忙',   rounds:  50, dPrime:  1.62, H: .76, M: .24, F: .24, R: .76 },
+  { id: 'demo-04', nickname: '夜宵巡逻员',   rounds:  50, dPrime:  1.35, H: .70, M: .30, F: .26, R: .74 },
+  { id: 'demo-05', nickname: '摸鱼观察员',   rounds: 100, dPrime:  1.02, H: .60, M: .40, F: .29, R: .71 },
+  { id: 'demo-06', nickname: '干饭第一名',   rounds:  25, dPrime:  0.84, H: .56, M: .44, F: .27, R: .73 },
+  { id: 'demo-07', nickname: '快乐星期四',   rounds:  50, dPrime:  0.58, H: .52, M: .48, F: .31, R: .69 },
+  { id: 'demo-08', nickname: '瞌睡虫本虫',   rounds:  25, dPrime:  0.33, H: .44, M: .56, F: .33, R: .67 },
+  { id: 'demo-09', nickname: '神游太虚中',   rounds: 100, dPrime:  0.12, H: .39, M: .61, F: .36, R: .64 },
+  { id: 'demo-10', nickname: '反向操作大师', rounds:  25, dPrime: -0.24, H: .32, M: .68, F: .42, R: .58 }
+];
+
+// 按玩家去重（每人只保留 d′ 最高的一局），并按 d′ 降序排序
+function getBoardRecords() {
+  const byId = {};
+  DEMO_PLAYERS.forEach(r => { byId[r.id] = r; });
+  loadLocalRecords().forEach(r => {
+    if (!byId[r.id] || r.dPrime > byId[r.id].dPrime) byId[r.id] = r;
+  });
+  return Object.values(byId).sort((a, b) => b.dPrime - a.dPrime);
+}
+
+/* ===================== 场景绘制 ===================== */
+// 人群位置（x, y 为脚底基线, s 缩放）。所有小人初始均为双手对称向下（pose 0）
+const CROWD = [
+  { x: 235, y: 505, s: 0.85, c: '#9aa5b1' },
+  { x: 320, y: 540, s: 1.05, c: '#8892a4' },
+  { x: 405, y: 512, s: 0.95, c: '#a3adb8' },
+  { x: 480, y: 545, s: 1.10, c: '#8d99aa' },
+  { x: 555, y: 500, s: 0.90, c: '#93a1b2' },
+  { x: 625, y: 532, s: 1.00, c: '#a0aab6' },
+  { x: 690, y: 512, s: 1.00, c: '#8494ab' },
+  { x: 275, y: 560, s: 1.10, c: '#939eae' },
+  { x: 450, y: 570, s: 0.95, c: '#8a96a8' },
+  { x: 600, y: 575, s: 1.05, c: '#96a0b0' },
+];
+
+// 简笔画小人：脚底位于 (0,0)，头在上方。
+// pose: 0 双臂对称向下  1 一只手臂举起（喊名字时）  3 一只手向左伸出拍背、另一只手自然下垂（漏报的朋友）
+function fig(c, pose) {
+  let arms;
+  if (pose === 1) {
+    arms = '<line x1="0" y1="-38" x2="15" y2="-56"/><line x1="0" y1="-38" x2="-13" y2="-24"/>';
+  } else if (pose === 3) {
+    arms = '<line x1="0" y1="-38" x2="-30" y2="-33"/><line x1="0" y1="-38" x2="13" y2="-24"/>';
+  } else {
+    arms = '<line x1="0" y1="-38" x2="-13" y2="-24"/><line x1="0" y1="-38" x2="13" y2="-24"/>';
+  }
+  return '<g fill="none" stroke="' + c + '" stroke-width="4" stroke-linecap="round">'
+    + '<circle cx="0" cy="-52" r="10" fill="#fff"/>'
+    + '<line x1="0" y1="-42" x2="0" y2="-12"/>' + arms
+    + '<line x1="0" y1="-12" x2="-11" y2="0"/><line x1="0" y1="-12" x2="11" y2="0"/>'
+    + '</g>';
+}
+
+// 对话气泡（SVG），中心 (cx,cy)，尾端指向下方说话者
+function bubbleSVG(cx, cy, text, fs) {
+  fs = fs || 32;
+  const w = Math.max(110, text.length * fs * 0.62 + 34);
+  const h = fs + 26;
+  const x = Math.min(Math.max(cx, w / 2 + 6), 994 - w / 2);
+  return '<g>'
+    + '<rect x="' + (x - w/2) + '" y="' + (cy - h/2) + '" width="' + w + '" height="' + h + '" rx="14" fill="#fff" stroke="#334155" stroke-width="3"/>'
+    + '<polygon points="' + (cx-11) + ',' + (cy + h/2 - 1) + ' ' + (cx+11) + ',' + (cy + h/2 - 1) + ' ' + cx + ',' + (cy + h/2 + 17) + '" fill="#fff" stroke="#334155" stroke-width="3" stroke-linejoin="round"/>'
+    + '<rect x="' + (cx-10) + '" y="' + (cy + h/2 - 4) + '" width="20" height="5" fill="#fff"/>'
+    + '<text x="' + cx + '" y="' + (cy + fs*0.36) + '" text-anchor="middle" font-size="' + fs + '" font-weight="700" fill="#0f172a">' + text + '</text>'
+    + '</g>';
+}
+
+const sceneEl = document.getElementById('scene');
+(function buildScene() {
+  const crowd = CROWD.map((p, i) =>
+    '<g id="crowd-' + i + '" transform="translate(' + p.x + ',' + p.y + ') scale(' + p.s + ')">' + fig(p.c, 0) + '</g>'
+  ).join('');
+  // 主角也是双手对称向下
+  const protagonist =
+    '<g transform="translate(812,592) scale(2.05)">'
+    + '<rect x="3" y="-38" width="13" height="22" rx="5" fill="#f59e0b"/>'  // 背包
+    + fig('#2f6fed', 0)
+    + '</g>';
+  sceneEl.innerHTML =
+    '<svg viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid slice">'
+    + '<rect x="0" y="0" width="1000" height="620" fill="#eaf1fa"/>'
+    // 远景：食堂
+    + '<g><rect x="28" y="295" width="150" height="235" rx="8" fill="#dfe8f5" stroke="#b9c8dd" stroke-width="2"/>'
+    + '<rect x="58" y="243" width="92" height="44" rx="6" fill="#fff" stroke="#b9c8dd" stroke-width="2"/>'
+    + '<text x="104" y="274" text-anchor="middle" font-size="27" fill="#334155" font-weight="700">食堂</text>'
+    + '<rect x="52" y="335" width="44" height="58" rx="4" fill="#c3d3e8" stroke="#b9c8dd" stroke-width="2"/>'
+    + '<rect x="112" y="335" width="44" height="58" rx="4" fill="#c3d3e8" stroke="#b9c8dd" stroke-width="2"/>'
+    + '<rect x="52" y="428" width="44" height="60" rx="4" fill="#c3d3e8" stroke="#b9c8dd" stroke-width="2"/>'
+    + '<rect x="112" y="428" width="44" height="60" rx="4" fill="#c3d3e8" stroke="#b9c8dd" stroke-width="2"/></g>'
+    // 地面
+    + '<line x1="0" y1="592" x2="1000" y2="592" stroke="#c6d2e3" stroke-width="4"/>'
+    // 人群（喊名字的人会临时举起手臂）
+    + crowd
+    // 漏报：朋友在主角身后，一只手拍背（仅这一只手臂），头顶右上方半重合💢表示很生气
+    + '<g id="gMiss" style="display:none" transform="translate(880,592) scale(1.75)">'
+    +   fig('#16a34a', 3)
+    +   '<text x="10" y="-46" text-anchor="middle" font-size="17">💢</text>'
+    + '</g>'
+    // 主角：赢麻了
+    + protagonist
+    // 命中：朋友走到前景交谈
+    + '<g id="gHit" style="display:none" transform="translate(655,592) scale(1.8)">' + fig('#16a34a', 0) + '</g>'
+    // 虚报：陌生人出现在前景
+    + '<g id="gFA" style="display:none" transform="translate(655,592) scale(1.8)">' + fig('#ea580c', 0) + '</g>'
+    // 特效层（刺激气泡 / 交谈省略号 / 问号）
+    + '<g id="fx"></g>'
+    + '</svg>';
+})();
+const fx = document.getElementById('fx');
+const gHit = document.getElementById('gHit');
+const gMiss = document.getElementById('gMiss');
+const gFA = document.getElementById('gFA');
+
+// 让某个小人举起/放下手臂（喊名字时举手）
+function setCrowdPose(i, pose) {
+  const el = document.getElementById('crowd-' + i);
+  if (el) el.innerHTML = fig(CROWD[i].c, pose);
+}
+function lowerAllArms() {
+  CROWD.forEach((_, i) => setCrowdPose(i, 0));
+}
+
+/* ===================== 可暂停计时器 ===================== */
+class PTimer {
+  constructor(fn, delay) { this.fn = fn; this.remaining = delay; this.tid = null; this.done = false; this._start(); }
+  _start() { this.startTs = Date.now(); this.tid = setTimeout(() => { this.done = true; this.fn(); }, this.remaining); }
+  pause() { if (this.tid) { clearTimeout(this.tid); this.remaining -= Date.now() - this.startTs; this.tid = null; } }
+  resume() { if (!this.done && !this.tid) { if (this.remaining <= 0) { this.done = true; this.fn(); } else this._start(); } }
+}
+
+/* ===================== 屏幕切换 ===================== */
+const SCREENS = ['login', 'home', 'game', 'results', 'leaderboard'];
+const screenEls = SCREENS.map(id => document.getElementById(id));
+function showScreen(el) {
+  screenEls.forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+const homeEl = document.getElementById('home');
+const gameEl = document.getElementById('game');
+const resultsEl = document.getElementById('results');
+const loginEl = document.getElementById('login');
+const leaderboardEl = document.getElementById('leaderboard');
+
+/* ===================== 登录逻辑 ===================== */
+const studentIdInput = document.getElementById('studentIdInput');
+const nicknameInput = document.getElementById('nicknameInput');
+const loginErr = document.getElementById('loginErr');
+
+studentIdInput.addEventListener('input', () => {
+  loginErr.textContent = '';
+  if (studentIdInput.value === DEBUG_ID) {          // 调试模式特例
+    nicknameInput.value = '进入调试模式';
+    nicknameInput.readOnly = true;
+  } else if (nicknameInput.readOnly) {              // 离开特例时恢复可编辑
+    nicknameInput.readOnly = false;
+    nicknameInput.value = '';
+  }
+});
+nicknameInput.addEventListener('input', () => { loginErr.textContent = ''; });
+
+function doLogin() {
+  const sid = studentIdInput.value.trim();
+  if (sid === DEBUG_ID) {                           // 调试模式
+    user = { studentId: sid, nickname: '进入调试模式', guest: false, debug: true };
+    enterHome();
+    return;
+  }
+  if (!/^\d{12}$/.test(sid)) {
+    loginErr.textContent = '学号应为 12 位整数，请输入正确的学号';
+    return;
+  }
+  const nick = nicknameInput.value.trim();
+  if (!nick) {
+    loginErr.textContent = '请输入昵称';
+    return;
+  }
+  user = { studentId: sid, nickname: nick, guest: false, debug: false };
+  enterHome();
+}
+function doGuest() {
+  user = { studentId: '', nickname: '游客', guest: true, debug: false };
+  enterHome();
+}
+function enterHome() {
+  document.getElementById('userBadge').innerHTML = user.debug
+    ? '🛠 欢迎你，<b>进入调试模式</b><span class="debug-tag">调试模式</span>'
+    : '欢迎你，<b>' + user.nickname + '</b>' + (user.guest ? '（游客）' : '');
+  document.getElementById('debugPanel').classList.toggle('active', !!user.debug);
+  document.getElementById('debugFlag').style.display = user.debug ? 'inline-block' : 'none';
+  showScreen(homeEl);
+}
+document.getElementById('loginBtn').onclick = doLogin;
+document.getElementById('guestBtn').onclick = doGuest;
+[studentIdInput, nicknameInput].forEach(el =>
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); })
+);
+
+/* ---------- 调试面板：调整对话框显示时长 ---------- */
+const msInput = document.getElementById('msInput');
+const msNow = document.getElementById('msNow');
+const debugFlag = document.getElementById('debugFlag');
+function syncBubbleMs() {
+  let v = parseInt(msInput.value, 10);
+  if (isNaN(v)) v = 300;
+  v = Math.max(50, Math.min(3000, v));
+  msInput.value = v;
+  bubbleMs = v;
+  msNow.textContent = '当前：' + v + ' ms（本模式成绩不计入排行榜）';
+  debugFlag.textContent = '🛠 调试模式 ' + v + 'ms';
+}
+msInput.addEventListener('change', syncBubbleMs);
+document.getElementById('msMinus').onclick = () => { msInput.value = (parseInt(msInput.value, 10) || 300) - 50; syncBubbleMs(); };
+document.getElementById('msPlus').onclick = () => { msInput.value = (parseInt(msInput.value, 10) || 300) + 50; syncBubbleMs(); };
+
+/* ===================== 游戏状态机 ===================== */
+const questionBox = document.getElementById('questionBox');
+const dialogBox = document.getElementById('dialogBox');
+const roundLabel = document.getElementById('roundLabel');
+const dBadge = document.getElementById('dBadge');
+const dText = document.getElementById('dText');
+const nextBtn = document.getElementById('nextBtn');
+const yesBtn = document.getElementById('yesBtn');
+const noBtn = document.getElementById('noBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const pauseOverlay = document.getElementById('pauseOverlay');
+const backOverlay = document.getElementById('backOverlay');
+const guestOverlay = document.getElementById('guestOverlay');
+
+const OUTCOME_INFO = {
+  hit:  { badge: '命中',     color: '#16a34a', text: '命中！你回应了喊你名字的朋友' },
+  miss: { badge: '漏报',     color: '#c2410c', text: '漏报！被你忽视的朋友看起来不太高兴' },
+  fa:   { badge: '虚报',     color: '#dc2626', text: '虚报！这下尴尬了，那并不是在叫你' },
+  cr:   { badge: '正确拒绝', color: '#1d4ed8', text: '正确拒绝！你知道这不是在叫你，无事发生' }
+};
+
+let state = 'idle';   // wait | bubble | question | outcome | idle
+let paused = false;
+let round = 0, total = 25;
+let results = [];     // { signal: bool, ans: bool, type: 'hit'|'miss'|'fa'|'cr' }
+let curSignal = false;
+let curTimer = null;
+
+function startGame() {
+  total = parseInt(document.querySelector('input[name="rounds"]:checked').value, 10);
+  round = 0; results = []; state = 'idle'; paused = false;
+  showScreen(gameEl);
+  nextRound();
+}
+
+function nextRound() {
+  round++;
+  roundLabel.textContent = round + ' / ' + total;
+  questionBox.style.display = 'none';
+  dialogBox.style.display = 'none';
+  fx.innerHTML = '';
+  [gHit, gMiss, gFA].forEach(g => g.style.display = 'none');
+  lowerAllArms();
+  state = 'wait';
+  curTimer = new PTimer(showStimulus, WAIT_MS);
+}
+
+function showStimulus() {
+  curSignal = Math.random() < 0.5;
+  const name = curSignal ? SIGNAL : NOISES[Math.floor(Math.random() * NOISES.length)];
+  const i = Math.floor(Math.random() * CROWD.length);
+  const p = CROWD[i];
+  setCrowdPose(i, 1);                       // 喊名字的小人举起一只手臂
+  const cy = p.y - 62 * p.s - 58;
+  fx.innerHTML = bubbleSVG(p.x, cy, '「' + name + '」', 34);
+  state = 'bubble';
+  curTimer = new PTimer(() => {
+    fx.innerHTML = '';
+    lowerAllArms();                         // 气泡消失，手臂放下
+    showQuestion();
+  }, bubbleMs);
+}
+
+function showQuestion() {
+  state = 'question';
+  yesBtn.disabled = false; noBtn.disabled = false;
+  questionBox.style.display = 'block';
+}
+
+function respond(ans) {
+  if (state !== 'question' || paused) return;
+  yesBtn.disabled = noBtn.disabled = true;
+  questionBox.style.display = 'none';
+  const type = curSignal ? (ans ? 'hit' : 'miss') : (ans ? 'fa' : 'cr');
+  results.push({ signal: curSignal, ans: ans, type: type });
+  showOutcome(type);
+}
+
+function showOutcome(type) {
+  state = 'outcome';
+  const info = OUTCOME_INFO[type];
+  if (type === 'hit') {
+    gHit.style.display = 'inline';
+    fx.innerHTML = bubbleSVG(655, 448, '……', 26) + bubbleSVG(812, 430, '……', 26);
+  } else if (type === 'miss') {
+    gMiss.style.display = 'inline';
+  } else if (type === 'fa') {
+    gFA.style.display = 'inline';
+    fx.innerHTML = '<text x="655" y="470" text-anchor="middle" font-size="56" font-weight="800" fill="#dc2626">？</text>';
+  } // cr：背景不变
+  dBadge.textContent = info.badge;
+  dBadge.style.background = info.color;
+  dText.textContent = info.text;
+  nextBtn.textContent = round >= total ? '查看结果' : '下一轮';
+  dialogBox.style.display = 'block';
+}
+
+function nextStep() {
+  if (state !== 'outcome') return;
+  if (round >= total) showResults();
+  else nextRound();
+}
+
+/* ---------- 暂停 / 继续 / 返回 ---------- */
+function pauseGame() {
+  if (paused || state === 'idle') return;
+  paused = true;
+  if (curTimer) curTimer.pause();
+  yesBtn.disabled = noBtn.disabled = true;
+  nextBtn.disabled = true;
+  pauseBtn.textContent = '▶ 继续';
+  pauseOverlay.classList.add('active');
+}
+
+function resumeGame() {
+  if (!paused) return;
+  paused = false;
+  if (curTimer) curTimer.resume();
+  if (state === 'question') { yesBtn.disabled = noBtn.disabled = false; }
+  if (state === 'outcome') { nextBtn.disabled = false; }
+  pauseBtn.textContent = '⏸ 暂停';
+  pauseOverlay.classList.remove('active');
+}
+
+function backToHome() {
+  state = 'idle'; paused = false;
+  if (curTimer) { curTimer.pause(); curTimer = null; }
+  pauseOverlay.classList.remove('active');
+  backOverlay.classList.remove('active');
+  guestOverlay.classList.remove('active');
+  pauseBtn.textContent = '⏸ 暂停';
+  showScreen(homeEl);
+}
+
+document.getElementById('startBtn').onclick = startGame;
+yesBtn.onclick = () => respond(true);
+noBtn.onclick = () => respond(false);
+nextBtn.onclick = nextStep;
+pauseBtn.onclick = () => paused ? resumeGame() : pauseGame();
+document.getElementById('resumeBigBtn').onclick = resumeGame;
+document.getElementById('quitPauseBtn').onclick = backToHome;
+
+document.getElementById('backBtn').onclick = () => {
+  if (state !== 'idle' && !paused) pauseGame();   // 返回前默认先暂停
+  backOverlay.classList.add('active');
+};
+document.getElementById('confirmBackBtn').onclick = backToHome;
+document.getElementById('cancelBackBtn').onclick = () => {
+  backOverlay.classList.remove('active');
+  if (state !== 'idle' && paused) resumeGame();   // 取消后从当前轮继续
+};
+document.getElementById('againBtn').onclick = startGame;
+document.getElementById('homeBtn').onclick = backToHome;
+
+/* ===================== 统计学工具 ===================== */
+// 误差函数（近似）
+function erf(x) {
+  const t = 1 / (1 + 0.5 * Math.abs(x));
+  const tau = t * Math.exp(-x * x - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418
+    + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+  return x >= 0 ? 1 - tau : tau - 1;
+}
+// 标准正态 CDF
+function normcdf(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+// 标准正态分位数（Acklam 逆正态近似）
+function zinv(p) {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const pl = 0.02425;
+  let q, r;
+  if (p < pl) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5]) / ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1);
+  }
+  if (p <= 1 - pl) {
+    q = p - 0.5; r = q * q;
+    return (((((a[0]*r + a[1])*r + a[2])*r + a[3])*r + a[4])*r + a[5]) * q / (((((b[0]*r + b[1])*r + b[2])*r + b[3])*r + b[4])*r + 1);
+  }
+  q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((c[0]*q + c[1])*q + c[2])*q + c[3])*q + c[4])*q + c[5]) / ((((d[0]*q + d[1])*q + d[2])*q + d[3])*q + 1);
+}
+// A'（非参数敏感度）
+function aprime(H, F) {
+  return H >= F ? 0.5 + (H - F) * (1 + H - F) / 4
+                : 0.5 + (H - F) * (1 + H + F) / 4;
+}
+
+/* ===================== 结果统计与渲染 ===================== */
+function showResults() {
+  state = 'idle';
+  const hits   = results.filter(r => r.type === 'hit').length;
+  const misses = results.filter(r => r.type === 'miss').length;
+  const fa     = results.filter(r => r.type === 'fa').length;
+  const cr     = results.filter(r => r.type === 'cr').length;
+  const nS = hits + misses, nN = fa + cr;
+
+  const H = nS ? hits / nS : 0;   // 命中率
+  const F = nN ? fa / nN : 0;     // 虚报率
+  const M = 1 - H;                // 漏报率
+  const R = 1 - F;                // 正确拒绝率
+
+  // 对数线性校正后计算 d' c β
+  const Hc = (hits + 0.5) / (nS + 1);
+  const Fc = (fa + 0.5) / (nN + 1);
+  const zH = zinv(Hc), zF = zinv(Fc);
+  const dPrime = zH - zF;
+  const c = -(zH + zF) / 2;
+  const beta = Math.exp((zF * zF - zH * zH) / 2);
+  const Ap = aprime(H, F);
+
+  document.getElementById('resSub').textContent =
+    '共 ' + total + ' 轮 · 信号 ' + nS + ' 次 / 噪声 ' + nN + ' 次 · 命中 ' + hits + '，漏报 ' + misses + '，虚报 ' + fa + '，正确拒绝 ' + cr
+    + (user && user.debug ? ' · 🛠 调试模式（成绩不计入排行榜）'
+        : (user && user.guest ? ' · 游客模式（成绩不计入排行榜）' : ''));
+
+  // ---- 混淆矩阵 ----
+  const pct = (n, d) => d ? (n / d * 100).toFixed(1) + '%' : '—';
+  document.getElementById('cmTable').innerHTML =
+    '<tr><th></th><th>回答"是"（是我）</th><th>回答"否"（不是我）</th></tr>'
+    + '<tr><th>信号<br>（叫"赢麻了"）</th>'
+    + '<td class="hit"><span class="num">' + hits + '</span>命中率 H<br>' + pct(hits, nS) + '</td>'
+    + '<td class="miss"><span class="num">' + misses + '</span>漏报率 M<br>' + pct(misses, nS) + '</td></tr>'
+    + '<tr><th>噪声<br>（叫相近名字）</th>'
+    + '<td class="fa"><span class="num">' + fa + '</span>虚报率 F<br>' + pct(fa, nN) + '</td>'
+    + '<td class="cr"><span class="num">' + cr + '</span>正确拒绝率 R<br>' + pct(cr, nN) + '</td></tr>';
+
+  document.getElementById('rateChips').innerHTML =
+    chip('命中率 H', H * 100, '#dcfce7', '#15803d')
+    + chip('漏报率 M', M * 100, '#ffedd5', '#c2410c')
+    + chip('虚报率 F', F * 100, '#fee2e2', '#b91c1c')
+    + chip('正确拒绝率 R', R * 100, '#dbeafe', '#1d4ed8');
+
+  // ---- 指标 ----
+  const cInterp = c < -0.05 ? '标准偏宽松：倾向回答"是"' : c > 0.05 ? '标准偏严格：倾向回答"否"' : '标准居中，不偏不倚';
+  const betaInterp = beta < 0.95 ? '偏冒险（宽松）' : beta > 1.05 ? '偏保守（严格）' : '接近理想观察者';
+  document.getElementById('metricList').innerHTML =
+    metric("d′（辨别力）", 'd′ = z(H) − z(F)', dPrime.toFixed(3), '值越大，对信号与噪声的区分能力越强；0 表示无法区分')
+    + metric('c（判断标准）', 'c = −[z(H) + z(F)] / 2', c.toFixed(3), cInterp)
+    + metric('β（似然比）', 'β = exp[(z(F)² − z(H)²) / 2]', beta.toFixed(3), 'β = ' + beta.toFixed(2) + '，' + betaInterp)
+    + metric("A′（非参数辨别力）", 'A′ = 0.5 + (H−F)(1+H−F) / 4', Ap.toFixed(3), '不依赖正态假设，0.5（无辨别力）~ 1（完美辨别）');
+
+  // ---- ROC 曲线 ----
+  drawROC(dPrime, F, H);
+
+  // ---- 上传成绩（游客 / 调试模式不上传） ----
+  if (user && !user.guest && !user.debug) {
+    const rec = {
+      id: user.studentId,
+      nickname: user.nickname,
+      rounds: total,
+      hits: hits, misses: misses, false_alarms: fa, correct_rejections: cr,
+      d_prime: +dPrime.toFixed(3), c: +c.toFixed(3), beta: +beta.toFixed(3), a_prime: +Ap.toFixed(3),
+      H: +H.toFixed(4), M: +M.toFixed(4), F: +F.toFixed(4), R: +R.toFixed(4),
+      ts: Date.now()
+    };
+    LeaderboardAPI.submit(rec);
+  }
+
+  showScreen(resultsEl);
+}
+
+function chip(name, val, bg, fg) {
+  return '<div class="chip" style="background:' + bg + ';color:' + fg + '"><b>' + val.toFixed(1) + '%</b>' + name + '</div>';
+}
+function metric(name, formula, val, interp) {
+  return '<div class="metric"><div class="mname">' + name + '<small>' + formula + '</small><small>' + interp + '</small></div>'
+    + '<div class="mval">' + val + '</div></div>';
+}
+
+/* ---------- ROC 曲线（正方形 1:1） ---------- */
+function drawROC(dPrime, userF, userH) {
+  const S = 340, m = 42;                 // 画布边长与边距
+  const px = f => m + (S - 2 * m) * f;   // 虚报率 F → x
+  const py = h => S - m - (S - 2 * m) * h; // 命中率 H → y
+  let pts = [];
+  for (let f = 0; f <= 1.0001; f += 0.02) {
+    const h = normcdf(zinv(Math.min(f, 1)) + dPrime);
+    pts.push(px(f).toFixed(1) + ',' + py(h).toFixed(1));
+  }
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const tickEls = ticks.map(t =>
+    '<line x1="' + px(t) + '" y1="' + (S - m) + '" x2="' + px(t) + '" y2="' + (S - m + 5) + '" stroke="#94a3b8" stroke-width="1.5"/>'
+    + '<text x="' + px(t) + '" y="' + (S - m + 18) + '" text-anchor="middle" font-size="11" fill="#64748b">' + t + '</text>'
+    + '<line x1="' + (m - 5) + '" y1="' + py(t) + '" x2="' + m + '" y2="' + py(t) + '" stroke="#94a3b8" stroke-width="1.5"/>'
+    + '<text x="' + (m - 9) + '" y="' + (py(t) + 4) + '" text-anchor="end" font-size="11" fill="#64748b">' + t + '</text>'
+  ).join('');
+  const grid = ticks.map(t =>
+    '<line x1="' + m + '" y1="' + py(t) + '" x2="' + (S - m) + '" y2="' + py(t) + '" stroke="#eef2f7" stroke-width="1"/>'
+    + '<line x1="' + px(t) + '" y1="' + m + '" x2="' + px(t) + '" y2="' + (S - m) + '" stroke="#eef2f7" stroke-width="1"/>'
+  ).join('');
+
+  // 操作点标注：显示具体数值 (F=…, H=…)
+  const ptLabel = '你的操作点 (F=' + userF.toFixed(2) + ', H=' + userH.toFixed(2) + ')';
+
+  document.getElementById('rocWrap').innerHTML =
+    '<svg viewBox="0 0 ' + S + ' ' + S + '">'
+    + '<rect x="' + m + '" y="' + m + '" width="' + (S - 2*m) + '" height="' + (S - 2*m) + '" fill="#fbfdff" stroke="#cbd5e1" stroke-width="1.5"/>'
+    + grid + tickEls
+    // 对角线（无辨别力）
+    + '<line x1="' + m + '" y1="' + (S - m) + '" x2="' + (S - m) + '" y2="' + m + '" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 5"/>'
+    // 理论 ROC 曲线
+    + '<polyline points="' + pts.join(' ') + '" fill="none" stroke="#2f6fed" stroke-width="3" stroke-linejoin="round"/>'
+    // 使用者操作点
+    + '<circle cx="' + px(userF) + '" cy="' + py(userH) + '" r="7" fill="#dc2626" stroke="#fff" stroke-width="2.5"/>'
+    + '<text x="' + Math.min(px(userF) + 12, S - m - 128) + '" y="' + Math.max(py(userH) - 10, m + 14) + '" font-size="12" font-weight="700" fill="#dc2626">' + ptLabel + '</text>'
+    // 曲线标注
+    + '<text x="' + (S - m - 8) + '" y="' + (m + 18) + '" text-anchor="end" font-size="13" font-weight="700" fill="#1d4ed8">d′ = ' + dPrime.toFixed(2) + '</text>'
+    // 坐标轴名称
+    + '<text x="' + (S / 2) + '" y="' + (S - 4) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">虚报率 F →</text>'
+    + '<text x="14" y="' + (S / 2) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#334155" transform="rotate(-90 14 ' + (S / 2) + ')">命中率 H →</text>'
+    + '</svg>';
+}
+
+/* ===================== 排行榜 ===================== */
+document.getElementById('lbBtn').onclick = function () {
+  if (!user || user.guest) {                     // 游客模式：提示先登录
+    guestOverlay.classList.add('active');
+    return;
+  }
+  showLeaderboard();
+};
+document.getElementById('goLoginBtn').onclick = function () {
+  guestOverlay.classList.remove('active');
+  nicknameInput.value = '';
+  nicknameInput.readOnly = false;
+  studentIdInput.value = '';
+  loginErr.textContent = '';
+  showScreen(loginEl);
+};
+document.getElementById('cancelGuestBtn').onclick = () => guestOverlay.classList.remove('active');
+document.getElementById('lbBackBtn').onclick = () => showScreen(resultsEl);
+
+function renderBoard(records) {
+  const me = user && !user.guest ? user.studentId : null;
+  let meRank = -1;
+
+  // ---- 表格 ----
+  const medal = ['<span class="rank-medal">🥇</span>', '<span class="rank-medal">🥈</span>', '<span class="rank-medal">🥉</span>'];
+  const rows = records.map((r, i) => {
+    const rank = i + 1;
+    const isMe = r.id === me;
+    if (isMe) meRank = rank;
+    const cls = (isMe ? 'me ' : '') + (rank <= 3 ? 'top' + rank : '');
+    return '<tr class="' + cls + '">'
+      + '<td>' + (rank <= 3 ? medal[rank - 1] + ' ' : '') + rank + '</td>'
+      + '<td class="nick">' + escapeHtml(r.nickname) + '</td>'
+      + '<td>' + r.rounds + '</td>'
+      + '<td class="dval">' + r.dPrime.toFixed(3) + '</td>'
+      + '<td>' + (r.H * 100).toFixed(1) + '%</td>'
+      + '<td>' + (r.M * 100).toFixed(1) + '%</td>'
+      + '<td>' + (r.F * 100).toFixed(1) + '%</td>'
+      + '<td>' + (r.R * 100).toFixed(1) + '%</td>'
+      + '</tr>';
+  }).join('');
+
+  document.getElementById('lbList').innerHTML =
+    '<table class="lb"><thead><tr>'
+    + '<th>排名</th><th>昵称</th><th>轮数</th><th>d′</th>'
+    + '<th>命中率</th><th>漏报率</th><th>虚报率</th><th>正确拒绝率</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+  document.getElementById('lbUserTag').textContent = user
+    ? (user.debug ? '🛠 调试模式（成绩不入榜）' : user.nickname)
+    : '';
+
+  // ---- 底部固定：用户自己的排名行（不随列表滚动） ----
+  const foot = document.getElementById('lbFoot');
+  if (meRank > 0) {
+    const r = records[meRank - 1];
+    foot.innerHTML =
+      '<span class="me-rank">你的排名：第 ' + meRank + ' 名</span>'
+      + '<span class="me-nick">' + escapeHtml(r.nickname) + '</span>'
+      + '<span class="me-item">轮数 <b>' + r.rounds + '</b></span>'
+      + '<span class="me-item">d′ <b>' + r.dPrime.toFixed(3) + '</b></span>'
+      + '<span class="me-item">命中率 <b>' + (r.H * 100).toFixed(1) + '%</b></span>'
+      + '<span class="me-item">漏报率 <b>' + (r.M * 100).toFixed(1) + '%</b></span>'
+      + '<span class="me-item">虚报率 <b>' + (r.F * 100).toFixed(1) + '%</b></span>'
+      + '<span class="me-item">正确拒绝率 <b>' + (r.R * 100).toFixed(1) + '%</b></span>';
+  } else if (me !== null) {
+    foot.innerHTML = '<span class="no-rec">你还没有上榜成绩，先完成一局游戏吧（调试模式成绩不计入排行榜）</span>';
+  } else {
+    foot.innerHTML = '<span class="no-rec">游客模式不参与排行榜</span>';
+  }
+}
+
+function showLeaderboard() {
+  showScreen(leaderboardEl);
+  document.getElementById('lbFoot').innerHTML = '<span class="no-rec">加载中…</span>';
+  LeaderboardAPI.fetchLeaderboard()
+    .then(renderBoard)
+    .catch(e => {
+      console.warn('排行榜加载失败:', e && e.message || e);
+      document.getElementById('lbFoot').innerHTML =
+        '<span class="no-rec">排行榜加载失败，请检查网络后点击"← 返回结果"再重试</span>';
+    });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+</script>
+</body>
+</html>
